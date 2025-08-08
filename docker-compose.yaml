@@ -1,25 +1,7 @@
 services:
-  cert-gen:
-    image: ras-certgen:latest
-    volumes:
-      - ./certs:/work/certs
-    working_dir: /work/certs
-    entrypoint: [ "/bin/sh", "-c" ]
-    environment:
-      - OSCAR_HOST=${OSCAR_HOST}
-    command: >
-      '
-      openssl req -x509 -newkey rsa:1024 \
-        -keyout key.pem \
-        -out cert.pem \
-        -sha256 -days 365 -nodes \
-        -subj "/CN=${OSCAR_HOST}" &&
-      cat cert.pem key.pem > server.pem &&
-      rm cert.pem key.pem
-      '
-
   nss-gen:
     image: ras-certgen:latest
+    build: Dockerfile.certgen
     volumes:
       - ./certs:/work/certs
     working_dir: /work/certs
@@ -31,21 +13,46 @@ services:
       certutil -A -n "RAS" -t "CT,,C" -i server.pem -d nss
       '
 
+  certsync:
+    image: ganeshpl/alpine-jq
+    entrypoint: |
+     /bin/bash -c "
+        jq -r '.leresolver.Certificates[] | select(.domain.main==\"'${OSCAR_HOST}'\") | .certificate' /data/acme.json | base64 -d > /out/cert.pem;
+        jq -r '.leresolver.Certificates[] | select(.domain.main==\"'${OSCAR_HOST}'\") | .key' /data/acme.json | base64 -d > /out/key.pem;
+        cd /out
+        cat cert.pem key.pem > server.pem
+        rm cert.pem key.pem
+      "
+    volumes:
+      - ${ACME_JSON_PATH}/acme.json:/data/acme.json:ro # set ACME_JSON_PATH to the path where traefik's let's encrypt resolver 
+      - ./certs:/out
+    deploy:
+      restart_policy:
+        delay: 24h # Re-run every 24 hours
+
   retro-aim-server:
     image: ras:latest
+    build: Dockerfile
     ports:
       - "5190:5190"
       - "9898:9898"
-      - "8080:8080"
+      - "8083:8080"
     env_file:
       - ./config/ssl/settings.env
 
   stunnel:
     image: ras-stunnel:5.75-openssl-1.0.2u
+    build: Dockerfile.stunnel
     ports:
-      - "443:443"
+      - "5443:443"
       - "5193:5193"
     volumes:
       - ./config/ssl/stunnel.conf:/etc/stunnel/stunnel.conf:ro
       - ./certs:/etc/stunnel/certs:ro
     command: stunnel.conf
+    labels:
+      - "traefik.http.routers.aim-stunnel.rule=Host(`${OSCAR_HOST}`)"
+      - "traefik.http.routers.aim-stunnel.tls=true"
+      - "traefik.http.routers.aim-stunnel.tls.certresolver=leresolver"
+      - "traefik.http.routers.aim-stunnel-https.entrypoints=websecure"
+      - "traefik.http.services.aim-stunnel.loadbalancer.server.port=5443"
