@@ -44,6 +44,13 @@ services:
     env_file:
       - ./config/ssl/settings.env
 
+  whoami:
+    image: docker.io/traefik/whoami:latest
+    labels:
+      - "traefik.http.routers.whoami-ami.rule=Host(`${OSCAR_HOST}`)"
+      - "traefik.http.routers.whoami-ami.tls=true"
+      - "traefik.http.routers.whoami-ami.tls.certresolver=leresolver"
+
   stunnel:
     image: ras-stunnel:5.75-openssl-1.0.2u
     build:
