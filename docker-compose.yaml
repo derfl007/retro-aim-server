@@ -1,7 +1,9 @@
 services:
   nss-gen:
     image: ras-certgen:latest
-    build: ./Dockerfile.certgen
+    build:
+      context: .
+      dockerfile: Dockerfile.certgen
     volumes:
       - ./certs:/work/certs
     working_dir: /work/certs
@@ -32,7 +34,9 @@ services:
 
   retro-aim-server:
     image: ras:latest
-    build: ./Dockerfile
+    build: 
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "5190:5190"
       - "9898:9898"
@@ -42,7 +46,9 @@ services:
 
   stunnel:
     image: ras-stunnel:5.75-openssl-1.0.2u
-    build: ./Dockerfile.stunnel
+    build:
+      context: .
+      dockerfile: Dockerfile.stunnel
     ports:
       - "5443:443"
       - "5193:5193"
